@@ -5,6 +5,7 @@ Module to train a bioFAM model
 import scipy as s
 import pandas as pd
 import numpy as np
+from loguru import logger
 
 from mofapy2.core.BayesNet import BayesNet
 
@@ -17,16 +18,8 @@ def train_model(model):
     ## Start training ##
     ####################
 
-    print("\n")
-    print("#" * 38)
-    print("## Training the model with seed %d ##" % (model.options["seed"]))
-    print("#" * 38)
-    print("\n")
+    logger.info("Training the model with seed %d." % (model.options["seed"]))
 
     model.iterate()
 
-    print("\n")
-    print("#" * 23)
-    print("## Training finished ##")
-    print("#" * 23)
-    print("\n")
+    logger.info("Training finished.")

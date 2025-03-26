@@ -7,6 +7,7 @@ from time import sleep, time, strftime
 from typing import List, Optional, Union
 from itertools import chain
 from functools import wraps
+from loguru import logger
 
 from mofapy2.core.BayesNet import *
 from mofapy2.core import gpu_utils
@@ -27,7 +28,7 @@ def keyboardinterrupt_saver(func):
         # Internal methods will raise TypeError when interrupted
         except (KeyboardInterrupt, TypeError):
             if self.train_opts["save_interrupted"]:
-                print("Attempting to save the model at the current iteration...")
+                logger.info("Attempting to save the model at the current iteration...")
                 if self.train_opts["outfile"] is not None and self.train_opts != "":
                     tmp_file = self.train_opts["outfile"]
                     tmp_file = tmp_file.rstrip(".hdf5") + "_interrupted.hdf5"
@@ -37,11 +38,11 @@ def keyboardinterrupt_saver(func):
                         "mofa_{}_interrupted.hdf5".format(strftime("%Y%m%d-%H%M%S")),
                     )
                 self.save(outfile=tmp_file)
-                print(
+                logger.warning(
                     "Saved partially trained model in {}. Exiting now.".format(tmp_file)
                 )
             else:
-                print(
+                logger.warning(
                     "Exiting now without saving the partially trained model. To save a partially trained model, set save_interrupted in the training options to true."
                 )
             sys.stdout.flush()
@@ -52,32 +53,12 @@ def keyboardinterrupt_saver(func):
 
 class entry_point(object):
     def __init__(self):
-        self.print_banner()
         self.dimensionalities = {"C": 0}
         self.model = None
 
         # flags
         self.imputed = False  # probabilistic imputation
         self.Zcompleted = False  # mefisto
-
-    def print_banner(self):
-        """Method to print the mofapy2 banner"""
-
-        banner = """
-        #########################################################
-        ###           __  __  ____  ______                    ### 
-        ###          |  \/  |/ __ \|  ____/\    _             ### 
-        ###          | \  / | |  | | |__ /  \ _| |_           ### 
-        ###          | |\/| | |  | |  __/ /\ \_   _|          ###
-        ###          | |  | | |__| | | / ____ \|_|            ###
-        ###          |_|  |_|\____/|_|/_/    \_\              ###
-        ###                                                   ### 
-        ######################################################### 
-       \n 
-        """
-
-        print(banner)
-        sys.stdout.flush()
 
     def set_covariates(self, sample_cov, covariates_names=None):
         """ "
@@ -131,7 +112,7 @@ class entry_point(object):
             elif isinstance(sample_cov, np.ndarray):
                 sample_cov = [sample_cov]
             else:
-                print("Error: sample_cov not recognised")
+                logger.error("Error: sample_cov not recognised")
                 sys.stdout.flush()
                 sys.exit()
 
@@ -144,7 +125,7 @@ class entry_point(object):
                 if isinstance(sample_cov[g], pd.DataFrame):
                     sample_cov[g] = sample_cov[g].values
                 else:
-                    print(
+                    logger.error(
                         "Error, sample_cov is not a numpy.ndarray or a pandas dataframe"
                     )
                     sys.stdout.flush()
@@ -156,7 +137,7 @@ class entry_point(object):
             [sample_cov[g].shape[0] == N[g] for g in range(self.dimensionalities["G"])]
         ):
             for g in range(self.dimensionalities["G"]):
-                print(
+                logger.error(
                     "Error, number of rows in sample covariates does not match number of samples in input data (N=%d vs. N=%d)"
                     % (sample_cov[g].shape[0], N[g])
                 )
@@ -171,13 +152,12 @@ class entry_point(object):
 
         # If sample_cov loaded successfully, print verbose message
         if not sample_cov is None:
-            print("Loaded %d covariate(s) for each sample..." % (sample_cov.shape[1]))
-            print("\n")
+            logger.info("Loaded %d covariate(s) for each sample..." % (sample_cov.shape[1]))
 
         # Define covariate names
         if covariates_names is None:
-            print("Covariates names not provided, using default naming convention:")
-            print("- covariate1, ..., covariateC\n")
+            logger.warn("Covariates names not provided, using default naming convention:")
+            logger.warn("- covariate1, ..., covariateC\n")
             self.smooth_opts["covariates_names"] = [
                 "covariate%d" % (c) for c in range(self.dimensionalities["C"])
             ]
@@ -227,11 +207,11 @@ class entry_point(object):
             elif isinstance(data, np.ndarray):
                 data = [[data]]
             else:
-                print("Error: Data not recognised")
+                logger.error("Error: Data not recognised")
                 sys.stdout.flush()
                 sys.exit()
         if len(data) == 0:
-            print("Error: Data is empty")
+            logger.error("Error: Data is empty")
             sys.stdout.flush()
             sys.exit()
 
@@ -244,7 +224,7 @@ class entry_point(object):
                     if isinstance(data[m][p], pd.DataFrame):
                         data[m][p] = data[m][p].values
                     else:
-                        print(
+                        logger.error(
                             "Error, input data is not a numpy.ndarray or a pandas dataframe"
                         )
                         sys.stdout.flush()
@@ -264,8 +244,8 @@ class entry_point(object):
 
         # Define views names
         if views_names is None:
-            print("View names not provided, using default naming convention:")
-            print("- view1, view2, ..., viewM\n")
+            logger.warning("View names not provided, using default naming convention:")
+            logger.warning("- view1, view2, ..., viewM")
             self.data_opts["views_names"] = ["view" + str(m) for m in range(M)]
         else:
             assert (
@@ -275,8 +255,8 @@ class entry_point(object):
 
         # Define features names
         if features_names is None:
-            print("Features names not provided, using default naming convention:")
-            print("- feature1_view1, featureD_viewM\n")
+            logger.warning("Features names not provided, using default naming convention:")
+            logger.warning("- feature1_view1, featureD_viewM\n")
             self.data_opts["features_names"] = [
                 ["feature%d_view%d" % (d, m) for d in range(D[m])] for m in range(M)
             ]
@@ -288,8 +268,8 @@ class entry_point(object):
 
         # Define groups names
         if groups_names is None:
-            print("Groups names not provided, using default naming convention:")
-            print("- group1, group2, ..., groupG\n")
+            logger.warning("Groups names not provided, using default naming convention:")
+            logger.warning("- group1, group2, ..., groupG\n")
             self.data_opts["groups_names"] = ["group" + str(g) for g in range(G)]
         else:
             assert (
@@ -299,8 +279,8 @@ class entry_point(object):
 
         # Define samples names
         if samples_names is None:
-            print("Samples names not provided, using default naming convention:")
-            print(
+            logger.warning("Samples names not provided, using default naming convention:")
+            logger.warning(
                 "- sample1_group1, sample2_group1, sample1_group2, ..., sampleN_groupG\n"
             )
             self.data_opts["samples_names"] = [
@@ -346,7 +326,7 @@ class entry_point(object):
         # If everything successful, print verbose message
         for m in range(M):
             for g in range(G):
-                print(
+                logger.info(
                     "Successfully loaded view='%s' group='%s' with N=%d samples and D=%d features..."
                     % (
                         self.data_opts["views_names"][m],
@@ -355,7 +335,6 @@ class entry_point(object):
                         data[m][g].shape[1],
                     )
                 )
-        print("\n")
 
         # Store intercepts
         self.intercepts = [
@@ -410,13 +389,13 @@ class entry_point(object):
         ), "'data' has to be an instance of pd.DataFrame"
 
         if "group" not in data.columns:
-            print(
+            logger.warning(
                 '\nNo "group" column found in the data frame, we will assume a common group for all samples...'
             )
             data["group"] = "single_group"
 
         if "view" not in data.columns:
-            print(
+            logger.warning(
                 '\nNo "view" column found in the data frame, we will assume a common view for all features...'
             )
             data["view"] = "single_view"
@@ -505,17 +484,15 @@ class entry_point(object):
         )
 
         # If everything successful, print verbose message
-        print("\n")
         for g in self.data_opts["groups_names"]:
             for m in self.data_opts["views_names"]:
                 try:
-                    print(
+                    logger.info(
                         "Loaded group='%s' view='%s' with N=%d samples and D=%d features..."
                         % (g, m, tmp_samples[g][m], tmp_features[g][m])
                     )
                 except:
-                    print("No data found for group='%s' and view='%s'..." % (g, m))
-        print("\n")
+                    logger.error("No data found for group='%s' and view='%s'..." % (g, m))
 
         # Convert from pandas dataframe to numpy array
         for m in range(M):
@@ -585,13 +562,13 @@ class entry_point(object):
         n_groups = 1  # no grouping by default
         if groups_label is not None:
             if not isinstance(groups_label, str):
-                print(
+                logger.error(
                     "Error: groups_label should be a string present in the observations column names"
                 )
                 sys.stdout.flush()
                 sys.exit()
             if groups_label not in adata.obs.columns:
-                print("Error: {} is not in observations names".format(groups_label))
+                logger.error("Error: {} is not in observations names".format(groups_label))
                 sys.stdout.flush()
                 sys.exit()
             n_groups = adata.obs[groups_label].unique().shape[0]
@@ -607,7 +584,7 @@ class entry_point(object):
                 if features_subset is not None:
                     data[0] = data[0][:, adata.var[features_subset].values]
             else:
-                print("Error: Layer {} does not exist".format(use_layer))
+                logger.error("Error: Layer {} does not exist".format(use_layer))
                 sys.stdout.flush()
                 sys.exit()
         elif use_raw:
@@ -697,7 +674,7 @@ class entry_point(object):
         # If everything successful, print verbose message
         for m in range(M):
             for g in range(G):
-                print(
+                logger.info(
                     "Loaded view='%s' group='%s' with N=%d samples and D=%d features..."
                     % (
                         self.data_opts["views_names"][m],
@@ -706,7 +683,6 @@ class entry_point(object):
                         D[m],
                     )
                 )
-        print("\n")
 
         # Store intercepts (it is for one view only)
         self.intercepts = [[]]
@@ -757,13 +733,13 @@ class entry_point(object):
         n_groups = 1  # no grouping by default
         if groups_label is not None:
             if not isinstance(groups_label, str):
-                print(
+                logger.error(
                     "Error: groups_label should be a string present in the observations column names"
                 )
                 sys.stdout.flush()
                 sys.exit()
             if groups_label not in loom.ca.keys():
-                print("Error: {} is not in observations names".format(groups_label))
+                logger.error("Error: {} is not in observations names".format(groups_label))
                 sys.stdout.flush()
                 sys.exit()
             n_groups = pd.unique(loom.ca[groups_label]).shape[0]
@@ -812,7 +788,7 @@ class entry_point(object):
         # If everything successful, print verbose message
         for m in range(M):
             for g in range(G):
-                print(
+                logger.info(
                     "Loaded view='%s' group='%s' with N=%d samples and D=%d features..."
                     % (
                         self.data_opts["views_names"][m],
@@ -821,7 +797,6 @@ class entry_point(object):
                         D[m],
                     )
                 )
-        print("\n")
 
         # Store intercepts
         self.intercepts = [None]
@@ -910,20 +885,20 @@ class entry_point(object):
             try:
                 import cupy as cp
 
-                print("\nGPU mode is activated\n")
+                logger.info("\nGPU mode is activated\n")
                 if gpu_device is not None:
                     cp.cuda.Device(gpu_device).use()
                     self.train_opts["gpu_device"] = gpu_device
-                    print("\nUsing GPU device {}\n".format(gpu_device))
+                    logger.info("Using GPU device {}".format(gpu_device))
             except ImportError:
-                print(
-                    "\nGPU mode is activated, but GPU not found... switching to CPU mode"
+                logger.warning(
+                    "GPU mode is activated, but GPU not found... switching to CPU mode"
                 )
-                print("For GPU mode, you need:")
-                print(
+                logger.warning("For GPU mode, you need:")
+                logger.warning(
                     "1 - Make sure that you are running MOFA+ on a machine with an NVIDIA GPU"
                 )
-                print(
+                logger.warning(
                     "2 - Install CUPY following instructions on https://docs-cupy.chainer.org/en/stable/install.html\n"
                 )
                 sys.stdout.flush()
@@ -941,23 +916,23 @@ class entry_point(object):
         self.train_opts["start_drop"] = int(startDrop)
         self.train_opts["freq_drop"] = int(freqDrop)
         if (dropR2 is not None) & (verbose is True):
-            print(
+            logger.info(
                 "\nDropping factors with minimum threshold of {0}% variance explained\n".format(
                     dropR2
                 )
             )
 
         if (dropR2 is not None) & (self.dimensionalities["N"] > 1e4):
-            print(
+            logger.warning(
                 "Warning: actively dropping factors during model training can be slow in large data sets."
             )
-            print(
+            logger.warnign(
                 "Consider training the model with set drop_factor_threshold = -1 and prune them a posteriori"
             )
 
         # Tolerance level for convergence
         if tolerance is not None:
-            print(
+            logger.warning(
                 "Warning: tolerance argument is depreciated, use the 'convergence_mode' argument instead"
             )
             self.train_opts["tolerance"] = float(tolerance)
@@ -965,7 +940,7 @@ class entry_point(object):
         # Convergence mode
         self.train_opts["convergence_mode"] = str(convergence_mode)
         if verbose:
-            print("Convergence mode: %s\n" % convergence_mode)
+            logger.info("Convergence mode: %s\n" % convergence_mode)
 
         # Do no stop even when convergence criteria is met
         self.train_opts["forceiter"] = nostop
@@ -1022,7 +997,7 @@ class entry_point(object):
         # Weight the views to avoid imbalance problems?
         self.train_opts["weight_views"] = weight_views
         if weight_views:
-            print(
+            logger.info(
                 "\nweight_views set to True. Weighting the ELBO (the objective function) based on the number of features per view\n"
             )
 
@@ -1037,7 +1012,7 @@ class entry_point(object):
     ):
         # Sanity checks
         if hasattr(self, "smooth_opts"):
-            print(
+            logger.info(
                 "Stochastic inference is not possible when using covariates - train_opts['stochastic'] is set to False - consider using the option 'sparseGP' instead."
             )
             self.train_opts["stochastic"] = False
@@ -1049,7 +1024,7 @@ class entry_point(object):
         assert start_stochastic >= 1, "start_stochastic must be >= 1"
 
         if self.train_opts["drop"]["min_r2"] is not None:
-            print("Dropping factors is currently disabled with stochastic inference...")
+            logger.info("Dropping factors is currently disabled with stochastic inference...")
             self.train_opts["drop"]["min_r2"] = None
 
         # Edit schedule: Z should come first (after Y) in the training schedule
@@ -1132,7 +1107,7 @@ class entry_point(object):
 
         # inactivate group-wise ARD when using the MEFISTO framework
         if self.model_opts["ard_factors"] is True:
-            print(
+            logger.warning(
                 "Smooth covariate framework is activated. This is not compatible with ARD prior on factors. Setting ard_factors to False...\n"
             )
             self.model_opts["ard_factors"] = False
@@ -1140,7 +1115,7 @@ class entry_point(object):
 
         # inactivate spike-slab on the factors when using the MEFISTO framework
         if self.model_opts["spikeslab_factors"] is True:
-            print(
+            logger.warning(
                 "Smooth covariate framework is activated. This is not compatible with spike-and-slab prior on factors. Setting spikeslab_factors to False...\n"
             )
             self.model_opts["spikeslab_factors"] = False
@@ -1167,9 +1142,7 @@ class entry_point(object):
             assert (
                 self.dimensionalities["C"] == 1
             ), "Warping only implemented for one dimensional covariates"
-            print("##")
-            print("## Warping set to True: aligning the covariates across groups")
-            print("##")
+            logger.info("## Warping set to True: aligning the covariates across groups")
 
         # Set a minium number of training iterations based on start of optimization and warping
         self.train_opts["min_iter"] = self.smooth_opts["start_opt"]
@@ -1189,7 +1162,7 @@ class entry_point(object):
 
             self.smooth_opts["sparseGP"] = True
             if self.dimensionalities["N"] < 1000:
-                print(
+                logger.warning(
                     "Warning: sparseGP should only be used when having a large sample size (>1e3)\n"
                 )
 
@@ -1222,11 +1195,9 @@ class entry_point(object):
             ix = self.train_opts["schedule"].index("Z")
             self.train_opts["schedule"].insert(ix, "U")
 
-            print("##")
-            print(
+            logger.info(
                 "## sparseGP set to True: using sparse Gaussian Process to speed up the training procedure"
             )
-            print("##")
         else:
             self.smooth_opts["sparseGP"] = False
 
@@ -1256,7 +1227,7 @@ class entry_point(object):
 
         # Define whether to use group and factor-wise ARD prior for Z
         if (self.dimensionalities["G"] > 1) & (ard_factors == False):
-            print(
+            logger.warning(
                 "WARNING: 'ard_factors' in model_options should be set to True if using multiple groups unless you are using MEFISTO\n"
             )
         # if self.dimensionalities["G"]>1: ard_factors = True
@@ -1264,7 +1235,7 @@ class entry_point(object):
 
         # Define whether to use view and factor-wise ARD prior for W
         if (self.dimensionalities["M"] > 1) & (ard_weights == False):
-            print(
+            logger.warning(
                 "WARNING: 'ard_weights' in model_options should be set to True if using multiple views\n"
             )
         # if self.dimensionalities["M"]>1: ard_weights = True
@@ -1276,24 +1247,23 @@ class entry_point(object):
         # Define likelihoods
         self.model_opts["likelihoods"] = self.likelihoods
 
-        print("Model options:")
-        print(
+        logger.info("Model options:")
+        logger.info(
             "- Automatic Relevance Determination prior on the factors: %s"
             % str(ard_factors)
         )
-        print(
+        logger.info(
             "- Automatic Relevance Determination prior on the weights: %s"
             % str(ard_weights)
         )
-        print("- Spike-and-slab prior on the factors: %s" % str(spikeslab_factors))
-        print("- Spike-and-slab prior on the weights: %s" % str(spikeslab_weights))
-        print("Likelihoods:")
+        logger.info("- Spike-and-slab prior on the factors: %s" % str(spikeslab_factors))
+        logger.info("- Spike-and-slab prior on the weights: %s" % str(spikeslab_weights))
+        logger.info("Likelihoods:")
         for m in range(self.dimensionalities["M"]):
-            print(
+            logger.info(
                 "- View %d (%s): %s"
                 % (m, self.data_opts["views_names"][m], self.likelihoods[m])
             )
-        print("\n")
 
     def set_data_options(
         self,
@@ -1311,19 +1281,19 @@ class entry_point(object):
         # change from float64 to float32 (to decrease memory usage and improve speed)
         config.use_float32 = use_float32
         if use_float32:
-            print(
+            logger.warning(
                 "use_float32 set to True: replacing float64 arrays by float32 arrays to speed up computations...\n"
             )
 
         # Scale views to unit variance
         self.data_opts["scale_views"] = scale_views
         if scale_views:
-            print("Scaling views to unit variance...\n")
+            logger.info("Scaling views to unit variance...\n")
 
         # Scale groups to unit variance
         self.data_opts["scale_groups"] = scale_groups
         if scale_groups:
-            print("Scaling groups to unit variance...\n")
+            logger.info("Scaling groups to unit variance...\n")
 
     def build(self):
         """Build the model"""
@@ -1337,7 +1307,7 @@ class entry_point(object):
                 len(self.smooth_opts) > 2
             ), "Smooth covariates applied but smooth options not defined. Please define set_smooth_options() before build()"
         if np.any(np.array(self.dimensionalities["D"]) < 15):
-            print(
+            logger.warning(
                 "\nWarning: some view(s) have less than 15 features, MOFA won't be able to learn meaningful factors for these view(s)...\n"
             )
         _, counts = np.unique(
@@ -1345,7 +1315,7 @@ class entry_point(object):
         )
         if not hasattr(self, "smooth_opts"):
             if np.any(counts < 15):
-                print(
+                logger.warning(
                     "\nWarning: some group(s) have less than 15 samples, MOFA won't be able to learn meaningful factors for these group(s)...\n"
                 )
 
@@ -1649,7 +1619,7 @@ class entry_point(object):
                 outfile = os.path.join(
                     "/tmp", "mofa_{}.hdf5".format(strftime("%Y%m%d-%H%M%S"))
                 )
-                print(
+                logger.info(
                     "No output file name provided as a training options or to the save method. Saving to {} .".format(
                         outfile
                     )
@@ -1658,7 +1628,7 @@ class entry_point(object):
                 outfile = self.train_opts["outfile"]
 
         if os.path.isfile(outfile):
-            print(
+            logger.warning(
                 "Warning: Output file {} already exists, it will be replaced".format(
                     outfile
                 )
@@ -1668,9 +1638,9 @@ class entry_point(object):
         if not os.path.isdir(os.path.dirname(outfile)) and (
             os.path.dirname(outfile) != ""
         ):
-            print("Output directory does not exist, creating it...")
+            logger.info("Output directory does not exist, creating it...")
             os.makedirs(os.path.dirname(outfile))
-        print("Saving model in %s..." % outfile)
+        logger.info("Saving model in %s..." % outfile)
         sys.stdout.flush()
 
         if not hasattr(self, "smooth_opts") or not hasattr(self, "sample_cov"):
@@ -1919,12 +1889,12 @@ def mofa(
                 return adata
             else:
                 if features_subset is None:
-                    print(
+                    logger.info(
                         "Saved MOFA embeddings in adata.obsm['X_mofa'] slot and their loadings in adata.varm['LFs']."
                     )
                 else:
-                    print("Saved MOFA embeddings in adata.obsm['X_mofa'] slot.")
+                    logger.info("Saved MOFA embeddings in adata.obsm['X_mofa'] slot.")
     else:
-        print(
+        logger.warning(
             "Can not add embeddings and loadings to AnnData object since h5py is not innp.alled."
         )

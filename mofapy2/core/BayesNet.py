@@ -18,6 +18,7 @@ from mofapy2.core.nodes.variational_nodes import Variational_Node
 from mofapy2.core.nodes.multiview_nodes import Multiview_Variational_Node
 from mofapy2.core import gpu_utils
 from .utils import corr, nans, infer_platform
+from loguru import logger
 
 import warnings
 
@@ -211,7 +212,7 @@ class BayesNet(object):
         #     self.scales = self.scales.drop(columns = drop)
         #     self.scales.columns = range(0, len(self.scales.columns))
         if self.dim["K"] == 0:
-            print("All factors shut down, no structure found in the data.")
+            logger.error("All factors shut down, no structure found in the data.")
             exit()
 
         if return_idx:
@@ -232,14 +233,14 @@ class BayesNet(object):
             node.TauTrick = True
 
         if self.options["verbose"]:
-            print("ELBO before training:")
-            print(
+            logger.info("ELBO before training:")
+            logger.info(
                 "".join(["%s=%.2f  " % (k, v) for k, v in elbo.drop("total").items()])
                 + "\nTotal: %.2f\n" % elbo["total"]
             )
         else:
             if not self.options["quiet"]:
-                print("ELBO before training: %.2f \n" % elbo["total"])
+                logger.info("ELBO before training: %.2f" % elbo["total"])
 
         return elbo
 
@@ -307,7 +308,7 @@ class BayesNet(object):
 
                     # Print ELBO monitoring
                     if not self.options["quiet"]:
-                        print(
+                        logger.info(
                             "Iteration %d: time=%.2f, ELBO=%.2f, deltaELBO=%.3f (%.8f%%), Factors=%d"
                             % (
                                 i,
@@ -319,11 +320,11 @@ class BayesNet(object):
                             )
                         )
                         if delta_elbo < 0 and not self.options["stochastic"]:
-                            print("Warning, lower bound is decreasing...\a")
+                            logger.warning("Warning, lower bound is decreasing...\a")
 
                     # Print ELBO decomposed by node and variance explained
                     if self.options["verbose"]:
-                        print(
+                        logger.info(
                             "- ELBO decomposition:  "
                             + "".join(
                                 [
@@ -332,7 +333,7 @@ class BayesNet(object):
                                 ]
                             )
                         )
-                        print(
+                        logger.info(
                             "- Time spent in ELBO computation: %.1f%%"
                             % (100 * t_elbo / (t_updates + t_elbo))
                         )
@@ -350,13 +351,13 @@ class BayesNet(object):
                             number_factors = number_factors[:i]
                             elbo = elbo[:i]
                             iter_time = iter_time[:i]
-                            print("\nConverged!\n")
+                            logger.info("Converged!")
                             break
 
                 # Do not calculate lower bound
                 else:
                     if not self.options["quiet"]:
-                        print(
+                        logger.info(
                             "Iteration %d: time=%.2f, Factors=%d"
                             % (i, time() - t, self.dim["K"])
                         )
@@ -401,7 +402,7 @@ class BayesNet(object):
         # Variance explained
         r2 = np.asarray(self.calculate_variance_explained(total=True)).mean(axis=0)
         r2[r2 < 0] = 0.0
-        print(
+        logger.info(
             "- Variance explained:  "
             + "   ".join(
                 ["View %s: %.2f%%" % (m, 100 * r2[m]) for m in range(self.dim["M"])]
@@ -411,7 +412,7 @@ class BayesNet(object):
         # Sparsity levels of the weights
         W = self.nodes["W"].getExpectation()
         foo = [np.mean(np.absolute(W[m]) < 1e-3) for m in range(self.dim["M"])]
-        print(
+        logger.info(
             "- Fraction of zero weights:  "
             + "   ".join(
                 ["View %s: %.0f%%" % (m, 100 * foo[m]) for m in range(self.dim["M"])]
@@ -423,17 +424,17 @@ class BayesNet(object):
         Z += np.random.normal(np.zeros(Z.shape), 1e-10)
         r = np.absolute(corr(Z.T, Z.T))
         np.fill_diagonal(r, 0)
-        print("- Maximum correlation between factors: %.2f" % (np.nanmax(r)))
+        logger.info("- Maximum correlation between factors: %.2f" % (np.nanmax(r)))
 
         # Factor norm
         bar = np.mean(np.square(Z), axis=0)
-        print(
+        logger.info(
             "- Factor norms:  " + " ".join(["%.2f" % bar[k] for k in range(Z.shape[1])])
         )
 
         # Tau
         tau = self.nodes["Tau"].getExpectation()
-        print(
+        logger.info(
             "- Tau per view (average):  "
             + "   ".join(
                 ["View %s: %.2f" % (m, tau[m].mean()) for m in range(self.dim["M"])]
@@ -444,7 +445,7 @@ class BayesNet(object):
         if "Sigma" in self.nodes.keys():
             sigma = self.nodes["Sigma"]
             if i >= sigma.start_opt and i % sigma.opt_freq == 0:
-                print(
+                logger.info(
                     "Sigma node has been optimised:\n- Lengthscales = %s \n- Scale = %s"
                     % (
                         np.array2string(sigma.get_ls(), precision=2, separator=", "),
@@ -454,7 +455,7 @@ class BayesNet(object):
                     )
                 )
 
-        print("\n")
+        logger.info("\n")
 
     def assess_convergence(self, delta_elbo, first_elbo, convergence_token):
         converged = False
@@ -471,7 +472,7 @@ class BayesNet(object):
         elif self.options["convergence_mode"] == "slow":
             convergence_threshold = 0.000005
         else:
-            print("Convergence mode not recognised")
+            logger.info("Convergence mode not recognised")
             exit()
 
         if 100 * abs(delta_elbo / first_elbo) < convergence_threshold:
@@ -566,10 +567,7 @@ class StochasticBayesNet(BayesNet):
         batch_ix = i % n_batches
         epoch = int(i / n_batches)
         if batch_ix == 0:
-            print("\n## Epoch %s ##" % str(epoch + 1))
-            print(
-                "-------------------------------------------------------------------------------------------"
-            )
+            logger.info("Epoch %s" % str(epoch + 1))
             self.shuffled_ix = np.random.choice(
                 range(self.dim["N"]), size=self.dim["N"], replace=False
             )
@@ -578,7 +576,7 @@ class StochasticBayesNet(BayesNet):
         max = int(S * (batch_ix + 1))
 
         if max > self.dim["N"]:
-            print("Error in stochastic")
+            logger.error("Error in stochastic")
             exit()
 
         # Define mini batch
@@ -623,8 +621,8 @@ class StochasticBayesNet(BayesNet):
         iter_count = 0
 
         # Print stochastic settings before training
-        print("Using stochastic variational inference with the following parameters:")
-        print(
+        logger.info("Using stochastic variational inference with the following parameters:")
+        logger.info(
             "- Batch size (fraction of samples): %.2f\n- Forgetting rate: %.2f\n- Learning rate: %.2f\n- Starts at iteration: %d \n"
             % (
                 100 * self.options["batch_size"],
@@ -695,7 +693,7 @@ class StochasticBayesNet(BayesNet):
                     )
 
                 # Print ELBO monitoring
-                print(
+                logger.info(
                     "Iteration %d: time=%.2f, ELBO=%.2f, deltaELBO=%.3f (%.9f%%), Factors=%d"
                     % (
                         i,
@@ -707,11 +705,11 @@ class StochasticBayesNet(BayesNet):
                     )
                 )
                 if delta_elbo < 0 and not self.options["stochastic"]:
-                    print("Warning, lower bound is decreasing...\a")
+                    logger.warning("Warning, lower bound is decreasing...\a")
 
                 # Print ELBO decomposed by node and variance explained
                 if self.options["verbose"]:
-                    print(
+                    logger.info(
                         "- ELBO decomposition:  "
                         + "".join(
                             [
@@ -720,7 +718,7 @@ class StochasticBayesNet(BayesNet):
                             ]
                         )
                     )
-                    print(
+                    logger.info(
                         "- Time spent in ELBO computation: %.1f%%"
                         % (100 * t_elbo / (t_updates + t_elbo))
                     )
@@ -734,19 +732,19 @@ class StochasticBayesNet(BayesNet):
                         number_factors = number_factors[:i]
                         elbo = elbo[:i]
                         iter_time = iter_time[:i]
-                        print("\nConverged!\n")
+                        logger.info("Converged!")
                         break
 
             # Do not calculate lower bound
             else:
-                print(
+                logger.info(
                     "Iteration %d: time=%.2f, Factors=%d"
                     % (i, time() - t, self.dim["K"])
                 )
 
             # Print other statistics
             if i >= (self.options["start_stochastic"]):
-                print("- Step size: %.3f" % ro)
+                logger.info("- Step size: %.3f" % ro)
 
             if self.options["verbose"]:
                 self.print_verbose_message(i)
@@ -759,8 +757,8 @@ class StochasticBayesNet(BayesNet):
             sys.stdout.flush()
 
         if iter_count + 1 == self.options["maxiter"]:
-            print(
-                "\nMaximum number of iterations reached: {}\n".format(
+            logger.warn(
+                "Maximum number of iterations reached: {}".format(
                     self.options["maxiter"]
                 )
             )
