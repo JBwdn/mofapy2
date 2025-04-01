@@ -236,7 +236,7 @@ class BayesNet(object):
             logger.info("ELBO before training:")
             logger.info(
                 "".join(["%s=%.2f  " % (k, v) for k, v in elbo.drop("total").items()])
-                + "\nTotal: %.2f\n" % elbo["total"]
+                + "Total: %.2f" % elbo["total"]
             )
         else:
             if not self.options["quiet"]:
@@ -320,7 +320,7 @@ class BayesNet(object):
                             )
                         )
                         if delta_elbo < 0 and not self.options["stochastic"]:
-                            logger.warning("Warning, lower bound is decreasing...\a")
+                            logger.warning("Warning, lower bound is decreasing...")
 
                     # Print ELBO decomposed by node and variance explained
                     if self.options["verbose"]:
@@ -446,7 +446,7 @@ class BayesNet(object):
             sigma = self.nodes["Sigma"]
             if i >= sigma.start_opt and i % sigma.opt_freq == 0:
                 logger.info(
-                    "Sigma node has been optimised:\n- Lengthscales = %s \n- Scale = %s"
+                    "Sigma node has been optimised:- Lengthscales = %s - Scale = %s"
                     % (
                         np.array2string(sigma.get_ls(), precision=2, separator=", "),
                         np.array2string(
@@ -454,8 +454,6 @@ class BayesNet(object):
                         ),
                     )
                 )
-
-        logger.info("\n")
 
     def assess_convergence(self, delta_elbo, first_elbo, convergence_token):
         converged = False
@@ -623,7 +621,7 @@ class StochasticBayesNet(BayesNet):
         # Print stochastic settings before training
         logger.info("Using stochastic variational inference with the following parameters:")
         logger.info(
-            "- Batch size (fraction of samples): %.2f\n- Forgetting rate: %.2f\n- Learning rate: %.2f\n- Starts at iteration: %d \n"
+            "- Batch size (fraction of samples): %.2f- Forgetting rate: %.2f- Learning rate: %.2f- Starts at iteration: %d "
             % (
                 100 * self.options["batch_size"],
                 self.options["forgetting_rate"],
@@ -705,7 +703,7 @@ class StochasticBayesNet(BayesNet):
                     )
                 )
                 if delta_elbo < 0 and not self.options["stochastic"]:
-                    logger.warning("Warning, lower bound is decreasing...\a")
+                    logger.warning("Warning, lower bound is decreasing...")
 
                 # Print ELBO decomposed by node and variance explained
                 if self.options["verbose"]:
